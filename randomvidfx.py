@@ -1,78 +1,73 @@
+import os
 import subprocess
 import random
 
-# Input variables
-audio = "input.wav"
-image = "input.png"
-output = "output.mp4"
-frame_rate = 30  # Set the frame rate of the video
+# Define file paths
+audio_file = 'input.wav'
+image_dir = 'alterimg/'
+output_video = 'output.mp4'
 
-# List of all possible transitions
+# Ensure the image directory exists
+if not os.path.exists(image_dir):
+    raise FileNotFoundError(f"Image directory '{image_dir}' not found.")
+
+# Get all image files from the image directory
+images = [os.path.join(image_dir, img) for img in sorted(os.listdir(image_dir)) if img.lower().endswith(('png', 'jpg', 'jpeg'))]
+
+if len(images) < 2:
+    raise ValueError("There should be at least two images for crossfade transitions.")
+
+# Define available crossfade transitions (only the ones implemented in FFmpeg)
 transitions = [
-    "fade", "fadeblack", "fadewhite", "fadegrays", "wipeleft", "wiperight", "wipeup", "wipedown",
-    "wipetl", "wipetr", "wipebl", "wipebr", "slideleft", "slideright", "slideup", "slidedown",
-    "diagbl", "diagbr", "diagtl", "diagtr", "smoothleft", "smoothright", "smoothup", "smoothdown",
-    "circlecrop", "rectcrop", "circleclose", "circleopen", "squeezeh", "squeezev", "pixelize",
-    "radial", "zoomin", "hlwind", "hrwind", "vuwind", "vdwind", "coverleft", "coverright", 
-    "coverup", "coverdown", "revealleft", "revealright", "revealup", "revealdown"
+    'fade', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
+    'slideleft', 'slideright', 'slideup', 'slidedown'
 ]
 
-# Step 1: Get the duration of the WAV file in seconds
-def get_audio_duration(audio_file):
+# Get the duration of the audio file
+try:
     result = subprocess.run(
-        ["ffmpeg", "-i", audio_file],
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_file],
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True
+        stderr=subprocess.STDOUT
     )
-    for line in result.stdout.splitlines():
-        if "Duration" in line:
-            time_str = line.split(",")[0].split("Duration:")[1].strip()
-            h, m, s = map(float, time_str.split(":"))
-            return h * 3600 + m * 60 + s
-    return None
+    audio_duration = float(result.stdout)
+except Exception as e:
+    raise RuntimeError(f"Failed to get audio duration: {e}")
 
-audio_seconds = get_audio_duration(audio)
+# Generate filter complex command for ffmpeg
+image_inputs = []
+filter_complex = ""
+duration = 5  # duration of each image in seconds
+fade_duration = 1  # duration of the crossfade in seconds
 
-# Step 2: Merge WAV file and PNG to create a base MP4 with preserved audio quality
-subprocess.run([
-    "ffmpeg", "-loop", "1", "-i", image, "-i", audio, "-c:v", "libx264", "-tune", "stillimage", 
-    "-c:a", "copy", "-pix_fmt", "yuv420p", "-shortest", "-vf", "scale=1400:1400", "-r", str(frame_rate), 
-    "base_video.mp4"
-])
+# Calculate the total number of images needed to match the audio duration
+num_images = int(audio_duration // (duration - fade_duration)) + 1
 
-# Step 3: Ensure diversity by avoiding consecutive repetitions and limiting the recent history of transitions
-used_transitions = []
-recent_limit = 3  # Limit of recently used transitions to avoid repetition
-num_transitions = 9  # Number of transitions to apply
+# Add each image as an input to ffmpeg (repeat images if necessary)
+for i in range(num_images):
+    image_index = i % len(images)
+    image_inputs.append(f"-loop 1 -t {duration + fade_duration} -i \"{images[image_index]}\"")
+    filter_complex += f"[{i}:v]format=yuv420p,scale=1400:1400,setsar=1[v{i}];"
 
-def get_random_transition():
-    available_transitions = [t for t in transitions if t not in used_transitions[-recent_limit:]]
-    chosen = random.choice(available_transitions)
-    used_transitions.append(chosen)
-    return chosen
+# Add crossfade transitions for looping images
+for i in range(num_images - 1):
+    current_image = i
+    next_image = i + 1
+    transition = random.choice(transitions)
+    if i == 0:
+        filter_complex += f"[v{current_image}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={duration * i}[vout{i}];"
+    else:
+        filter_complex += f"[vout{i-1}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={duration * i}[vout{i}];"
 
-# Step 4: Generate the filter_complex string with diverse random transitions
-filter_complex = "[0:v] fps={}, hue=s=0.8:h=2, eq=contrast=1.5:brightness=-0.05:saturation=1.5, fade=t=in:st=0:d=2 [v1];".format(frame_rate)
+# Ensure the last output is correctly assigned
+filter_complex += f"[vout{num_images - 2}]format=yuv420p[video]"
 
-for i in range(1, num_transitions + 1):
-    next_video = i + 1
-    offset = i * 5
-    transition = get_random_transition()
-    filter_complex += " [v{}]split[v{}a][v{}b];[v{}a][v{}b] xfade=transition={}:duration=2:offset={} [v{}];".format(
-        i, i, i, i, i, transition, offset, next_video
-    )
+# Create the ffmpeg command
+ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k -shortest {output_video}"
 
-filter_complex += " [v{}] fade=t=out:st={}:d=2 [v12]".format(num_transitions + 1, audio_seconds - 2)
-
-# Step 5: Apply the transitions and create the final output
-subprocess.run([
-    "ffmpeg", "-i", "base_video.mp4", "-filter_complex", filter_complex, "-map", "[v12]", "-map", "0:a",
-    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.0", "-movflags", "+faststart",
-    "-c:a", "copy", output
-])
-
-# Step 6: Clean up the intermediate files
-subprocess.run(["rm", "base_video.mp4"])
-
-print(f"Video processing complete: {output}")
+# Run the ffmpeg command
+try:
+    subprocess.run(ffmpeg_command, shell=True, check=True)
+    print(f"Video created successfully: {output_video}")
+except subprocess.CalledProcessError as e:
+    print(f"Error occurred: {e}")
