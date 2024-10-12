@@ -6,6 +6,11 @@ import random
 audio_file = 'input.wav'
 image_dir = 'alterimg/'
 output_video = 'output.mp4'
+temp_video = 'temp_output.mp4'
+
+# Fade settings (user can adjust these values)
+fade_in_duration = 2  # duration of fade in effect in seconds
+fade_out_duration = 2  # duration of fade out effect in seconds
 
 # Ensure the image directory exists
 if not os.path.exists(image_dir):
@@ -62,12 +67,28 @@ for i in range(num_images - 1):
 # Ensure the last output is correctly assigned
 filter_complex += f"[vout{num_images - 2}]format=yuv420p[video]"
 
-# Create the ffmpeg command
-ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k -shortest {output_video}"
+# Create the ffmpeg command to generate the initial video
+ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k -shortest {temp_video}"
 
-# Run the ffmpeg command
+# Run the ffmpeg command to create the initial video
 try:
     subprocess.run(ffmpeg_command, shell=True, check=True)
-    print(f"Video created successfully: {output_video}")
+    print(f"Temporary video created successfully: {temp_video}")
 except subprocess.CalledProcessError as e:
     print(f"Error occurred: {e}")
+    raise
+
+# Add fade in and fade out effects to the video
+fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[v];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[v]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k {output_video}"
+
+# Run the ffmpeg command to add fade in/out effects
+try:
+    subprocess.run(fade_command, shell=True, check=True)
+    print(f"Final video created successfully: {output_video}")
+except subprocess.CalledProcessError as e:
+    print(f"Error occurred: {e}")
+    raise
+
+# Clean up temporary video
+if os.path.exists(temp_video):
+    os.remove(temp_video)
