@@ -9,8 +9,8 @@ output_video = 'output.mp4'
 temp_video = 'temp_output.mp4'
 
 # Fade settings (user can adjust these values)
-fade_in_duration = 5  # duration of fade in effect in seconds
-fade_out_duration = 5  # duration of fade out effect in seconds
+fade_in_duration = 2  # duration of fade in effect in seconds
+fade_out_duration = 2  # duration of fade out effect in seconds
 
 # Ensure the image directory exists
 if not os.path.exists(image_dir):
@@ -22,16 +22,14 @@ images = [os.path.join(image_dir, img) for img in sorted(os.listdir(image_dir)) 
 if len(images) < 2:
     raise ValueError("There should be at least two images for crossfade transitions.")
 
-# Define available crossfade transitions (all the ones implemented in FFmpeg)
+# Define available crossfade transitions (all the ones implemented in FFmpeg excluding slide and wipe)
 transitions = [
-    'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
-    'slideleft', 'slideright', 'slideup', 'slidedown', 'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
+    'fade', 'fadeblack', 'fadewhite', 'distance',
+    'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
     'circlecrop', 'rectcrop', 'circleclose', 'circleopen', 'horzclose', 'horzopen', 'vertclose', 'vertopen',
     'diagbl', 'diagbr', 'diagtl', 'diagtr', 'hlslice', 'hrslice', 'vuslice', 'vdslice',
-    'dissolve', 'pixelize', 'radial', 'hblur', 'wipetl', 'wipetr', 'wipebl', 'wipebr',
-    'fadegrays', 'squeezev', 'squeezeh', 'zoomin', 'hlwind', 'hrwind', 'vuwind', 'vdwind',
-    'coverleft', 'coverright', 'coverup', 'coverdown', 'revealleft', 'revealright', 'revealup', 'revealdown'
-]
+    'dissolve', 'pixelize', 'radial', 'hblur', 'fadegrays', 'squeezev', 'squeezeh', 'zoomin',
+    'hlwind', 'hrwind', 'vuwind', 'vdwind', ]
 
 # Get the duration of the audio file
 try:
@@ -73,7 +71,7 @@ for i in range(num_images - 1):
 filter_complex += f"[vout{num_images - 2}]format=yuv420p[video]"
 
 # Create the ffmpeg command to generate the initial video
-ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k -shortest {temp_video}"
+ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k -shortest {temp_video}"
 
 # Run the ffmpeg command to create the initial video
 try:
@@ -84,7 +82,7 @@ except subprocess.CalledProcessError as e:
     raise
 
 # Add fade in and fade out effects to the video
-fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[v];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[v]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 192k {output_video}"
+fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[v];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[v]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {output_video}"
 
 # Run the ffmpeg command to add fade in/out effects
 try:
