@@ -9,8 +9,8 @@ output_video = 'output.mp4'
 temp_video = 'temp_output.mp4'
 
 # Fade settings (user can adjust these values)
-fade_in_duration = 2  # duration of fade in effect in seconds
-fade_out_duration = 2  # duration of fade out effect in seconds
+fade_in_duration = 5  # duration of fade in effect in seconds
+fade_out_duration = 5  # duration of fade out effect in seconds
 
 # Ensure the image directory exists
 if not os.path.exists(image_dir):
@@ -22,10 +22,15 @@ images = [os.path.join(image_dir, img) for img in sorted(os.listdir(image_dir)) 
 if len(images) < 2:
     raise ValueError("There should be at least two images for crossfade transitions.")
 
-# Define available crossfade transitions (only the ones implemented in FFmpeg)
+# Define available crossfade transitions (all the ones implemented in FFmpeg)
 transitions = [
-    'fade', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
-    'slideleft', 'slideright', 'slideup', 'slidedown'
+    'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
+    'slideleft', 'slideright', 'slideup', 'slidedown', 'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
+    'circlecrop', 'rectcrop', 'circleclose', 'circleopen', 'horzclose', 'horzopen', 'vertclose', 'vertopen',
+    'diagbl', 'diagbr', 'diagtl', 'diagtr', 'hlslice', 'hrslice', 'vuslice', 'vdslice',
+    'dissolve', 'pixelize', 'radial', 'hblur', 'wipetl', 'wipetr', 'wipebl', 'wipebr',
+    'fadegrays', 'squeezev', 'squeezeh', 'zoomin', 'hlwind', 'hrwind', 'vuwind', 'vdwind',
+    'coverleft', 'coverright', 'coverup', 'coverdown', 'revealleft', 'revealright', 'revealup', 'revealdown'
 ]
 
 # Get the duration of the audio file
