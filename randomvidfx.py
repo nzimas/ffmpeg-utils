@@ -8,9 +8,11 @@ image_dir = 'alterimg/'
 output_video = 'output.mp4'
 temp_video = 'temp_output.mp4'
 
-# Fade settings (user can adjust these values)
+# Fade and transition settings (user can adjust these values)
 fade_in_duration = 2  # duration of fade in effect in seconds
 fade_out_duration = 2  # duration of fade out effect in seconds
+transition_time_min = 0.5  # minimum duration of each transition in seconds
+transition_time_max = 2.0  # maximum duration of each transition in seconds
 
 # Ensure the image directory exists
 if not os.path.exists(image_dir):
@@ -46,7 +48,8 @@ except Exception as e:
 image_inputs = []
 filter_complex = ""
 duration = 5  # duration of each image in seconds
-fade_duration = 1  # duration of the crossfade in seconds
+# Randomly set transition duration within the user-defined range
+fade_duration = random.uniform(transition_time_min, transition_time_max)  # duration of the crossfade in seconds
 
 # Calculate the total number of images needed to match the audio duration
 num_images = int(audio_duration // (duration - fade_duration)) + 1
@@ -62,6 +65,7 @@ for i in range(num_images - 1):
     current_image = i
     next_image = i + 1
     transition = random.choice(transitions)
+    fade_duration = random.uniform(transition_time_min, transition_time_max)  # Randomize the transition duration
     if i == 0:
         filter_complex += f"[v{current_image}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={duration * i}[vout{i}];"
     else:
