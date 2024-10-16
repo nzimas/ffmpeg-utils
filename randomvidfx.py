@@ -7,17 +7,6 @@ audio_file = 'input.wav'
 image_dir = 'alterimg/'
 output_video = 'output.mp4'
 temp_video = 'temp_output.mp4'
-
-# Fade and transition settings (user can adjust these values)
-fade_in_duration = 2  # duration of fade in eimport os
-import subprocess
-import random
-
-# Define file paths
-audio_file = 'input.wav'
-image_dir = 'alterimg/'
-output_video = 'output.mp4'
-temp_video = 'temp_output.mp4'
 output_glitched_video = 'output_glitched.mp4'
 
 # Fade and transition settings (user can adjust these values)
@@ -108,15 +97,20 @@ except subprocess.CalledProcessError as e:
     print(f"Error occurred: {e}")
     raise
 
-# Apply glitch and stuttering effects to the entire video
-num_glitches = random.randint(3, 6)  # Random number of glitches between 3 and 6
+# Apply glitch and stuttering effects to random segments of the video
+num_glitches = random.randint(2, 5)  # Random number of glitches between 2 and 5
 current_input = output_video
+segment_durations = []
+for _ in range(num_glitches):
+    start_time = random.uniform(0, audio_duration - 3)  # Random start time
+    duration = random.uniform(1, 3)  # Duration between 1 and 3 seconds
+    segment_durations.append((start_time, duration))
 
 # Apply each glitch effect in sequence
-for i in range(num_glitches):
+for i, (start_time, duration) in enumerate(segment_durations):
     effect = random.choice(["tblend=all_mode=and", "fps=fps=10", "hflip", "vflip", "edgedetect=low=0.1:high=0.3"])
     glitched_output = f"glitched_{i}.mp4"
-    filter_complex_glitch = f"[0:v]{effect}[v]"
+    filter_complex_glitch = f"[0:v]trim=start={start_time}:duration={duration},setpts=PTS-STARTPTS,{effect}[g];[0:v][g]overlay=enable='between(t,{start_time},{start_time + duration})'[v]"
     glitch_command = f"ffmpeg -y -i {current_input} -filter_complex \"{filter_complex_glitch}\" -map '[v]' -map 0:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {glitched_output}"
 
     # Run the ffmpeg command to apply the glitch effect
@@ -136,3 +130,9 @@ os.rename(current_input, output_glitched_video)
 # Clean up temporary video
 if os.path.exists(temp_video):
     os.remove(temp_video)
+
+# Clean up intermediate glitched files
+for i in range(num_glitches - 1):
+    intermediate_file = f"glitched_{i}.mp4"
+    if os.path.exists(intermediate_file):
+        os.remove(intermediate_file)
