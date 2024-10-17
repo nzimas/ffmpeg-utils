@@ -30,7 +30,7 @@ images = [os.path.join(image_dir, img) for img in sorted(os.listdir(image_dir)) 
 if len(images) < 2:
     raise ValueError("There should be at least two images for crossfade transitions.")
 
-# Define available crossfade transitions (all the ones implemented in FFmpeg excluding slide and wipe)
+# Define available crossfade transitions
 transitions = [
     'fade', 'fadeblack', 'fadewhite', 'distance',
     'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
@@ -50,20 +50,20 @@ try:
 except Exception as e:
     raise RuntimeError(f"Failed to get audio duration: {e}")
 
+# Calculate the total number of images needed to match the audio duration
+duration_per_image = 5  # duration each image is displayed before transition
+fade_duration = random.uniform(transition_time_min, transition_time_max)
+image_duration_with_transition = duration_per_image - fade_duration
+num_images = int((audio_duration + fade_duration) // image_duration_with_transition) + 1
+
 # Generate filter complex command for ffmpeg
 image_inputs = []
 filter_complex = ""
-duration = 5  # duration of each image in seconds
-# Randomly set transition duration within the user-defined range
-fade_duration = random.uniform(transition_time_min, transition_time_max)  # duration of the crossfade in seconds
-
-# Calculate the total number of images needed to match the audio duration
-num_images = int(audio_duration // (duration - fade_duration)) + 1
 
 # Add each image as an input to ffmpeg (repeat images if necessary)
 for i in range(num_images):
     image_index = i % len(images)
-    image_inputs.append(f"-loop 1 -t {duration + fade_duration} -i \"{images[image_index]}\"")
+    image_inputs.append(f"-loop 1 -t {duration_per_image} -i \"{images[image_index]}\"")
     filter_complex += f"[{i}:v]format=yuv420p,scale=1400:1400,setsar=1[v{i}];"
 
 # Add crossfade transitions for looping images
@@ -72,16 +72,17 @@ for i in range(num_images - 1):
     next_image = i + 1
     transition = random.choice(transitions)
     fade_duration = random.uniform(transition_time_min, transition_time_max)  # Randomize the transition duration
+    offset = image_duration_with_transition * i
     if i == 0:
-        filter_complex += f"[v{current_image}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={duration * i}[vout{i}];"
+        filter_complex += f"[v{current_image}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={offset}[vout{i}];"
     else:
-        filter_complex += f"[vout{i-1}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={duration * i}[vout{i}];"
+        filter_complex += f"[vout{i-1}][v{next_image}]xfade=transition={transition}:duration={fade_duration}:offset={offset}[vout{i}];"
 
 # Ensure the last output is correctly assigned
 filter_complex += f"[vout{num_images - 2}]format=yuv420p[video]"
 
 # Create the ffmpeg command to generate the initial video
-ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k -shortest {temp_video}"
+ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {temp_video}"
 
 # Run the ffmpeg command to create the initial video
 try:
@@ -113,8 +114,7 @@ current_input = output_video
 
 # Apply each glitch effect in sequence
 for i, (start_time, duration) in enumerate(segment_durations):
-    effect = random.choice(["frei0r=distort0r:0.5|0.01", "frei0r=nervous","frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6", "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1", "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'", "frei0r=baltan", "frei0r=cluster:1", "frei0r=contrast0r:1", "frei0r=letterb0xed", "frei0r=vignette", "frei0r=emboss"])
-    #effect = random.choice(["frei0r=dodge"])
+    effect = random.choice(["frei0r=distort0r:0.5|0.01", "frei0r=nervous", "frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6", "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1", "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'", "frei0r=baltan", "frei0r=cluster:1", "frei0r=contrast0r:1", "frei0r=letterb0xed", "frei0r=vignette", "frei0r=emboss"])
     glitched_output = f"glitched_{i}.mp4"
     filter_complex_glitch = f"[0:v]trim=start={start_time}:duration={duration},setpts=PTS-STARTPTS,{effect}[g];[0:v][g]overlay=enable='between(t,{start_time},{start_time + duration})'[v]"
     glitch_command = f"ffmpeg -y -i {current_input} -filter_complex \"{filter_complex_glitch}\" -map '[v]' -map 0:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {glitched_output}"
