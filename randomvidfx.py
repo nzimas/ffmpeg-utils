@@ -93,7 +93,7 @@ except subprocess.CalledProcessError as e:
     raise
 
 # Add fade in and fade out effects to the video
-fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[v];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[v]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {output_video}"
+fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration},format=yuv420p[v];[0:v][v]overlay[video];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[video]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {output_video}"
 
 # Run the ffmpeg command to add fade in/out effects
 try:
@@ -112,9 +112,18 @@ for _ in range(glitch_freq):
 
 current_input = output_video
 
+# Ensure unique glitch effects are applied
+effects_available = [
+    "frei0r=distort0r:0.5|0.01", "frei0r=nervous", "frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6",
+    "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1",
+    "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'",
+    "frei0r=baltan", "frei0r=cluster:1", "frei0r=contrast0r:1", "frei0r=letterb0xed", "frei0r=vignette", "frei0r=emboss"
+]
+
 # Apply each glitch effect in sequence
 for i, (start_time, duration) in enumerate(segment_durations):
-    effect = random.choice(["frei0r=distort0r:0.5|0.01", "frei0r=nervous", "frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6", "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1", "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'", "frei0r=baltan", "frei0r=cluster:1", "frei0r=contrast0r:1", "frei0r=letterb0xed", "frei0r=vignette", "frei0r=emboss"])
+    effect = random.choice(effects_available)
+    effects_available.remove(effect)  # Ensure the effect is not used again
     glitched_output = f"glitched_{i}.mp4"
     filter_complex_glitch = f"[0:v]trim=start={start_time}:duration={duration},setpts=PTS-STARTPTS,{effect}[g];[0:v][g]overlay=enable='between(t,{start_time},{start_time + duration})'[v]"
     glitch_command = f"ffmpeg -y -i {current_input} -filter_complex \"{filter_complex_glitch}\" -map '[v]' -map 0:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {glitched_output}"
