@@ -1,6 +1,7 @@
 import os
 import subprocess
 import random
+import numpy as np
 
 # Define file paths
 audio_file = 'input.wav'
@@ -16,9 +17,10 @@ transition_time_min = 0.5  # minimum duration of each transition in seconds
 transition_time_max = 1  # maximum duration of each transition in seconds
 
 # Glitch effect settings (user can adjust these values)
-glitch_freq = 3 # defines the number of times an effect is applied
+glitch_freq = 3  # defines the number of times an effect is applied
 glitch_duration_min = 1  # minimum duration of the effect in seconds
 glitch_duration_max = 2  # maximum duration of the effect in seconds
+random_glitch_type = 'evenly'  # 'evenly' or 'random' distribution of glitches
 
 # Ensure the image directory exists
 if not os.path.exists(image_dir):
@@ -81,7 +83,7 @@ for i in range(num_images - 1):
 # Ensure the last output is correctly assigned
 filter_complex += f"[vout{num_images - 2}]format=yuv420p[video]"
 
-# Create the ffmpeg command to generate the initial video
+# Create the ffmpeg command to generate the initial video with transitions and fades (output.mp4)
 ffmpeg_command = f"ffmpeg -y {' '.join(image_inputs)} -i {audio_file} -filter_complex \"{filter_complex}\" -map '[video]' -map {num_images}:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {temp_video}"
 
 # Run the ffmpeg command to create the initial video
@@ -92,27 +94,35 @@ except subprocess.CalledProcessError as e:
     print(f"Error occurred: {e}")
     raise
 
-# Add fade in and fade out effects to the video
-fade_command = f"ffmpeg -y -i {temp_video} -filter_complex \"[0:v]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration},format=yuv420p[v];[0:v][v]overlay[video];[0:a]afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}[a]\" -map '[video]' -map '[a]' -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {output_video}"
+# Add fade in and fade out effects to the initial video
+fade_command = f"ffmpeg -y -i {temp_video} -vf \"fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}\" -af \"afade=t=in:st=0:d={fade_in_duration},afade=t=out:st={audio_duration - fade_out_duration}:d={fade_out_duration}\" -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {output_video}"
 
 # Run the ffmpeg command to add fade in/out effects
 try:
     subprocess.run(fade_command, shell=True, check=True)
-    print(f"Final video created successfully: {output_video}")
+    print(f"Final video with transitions and fades created successfully: {output_video}")
 except subprocess.CalledProcessError as e:
     print(f"Error occurred: {e}")
     raise
 
-# Apply glitch and stuttering effects to random segments of the video
+# Apply glitch and stuttering effects to random segments of the video to create output_glitched.mp4
 segment_durations = []
-for _ in range(glitch_freq):
-    start_time = random.uniform(0, audio_duration - glitch_duration_max)  # Random start time
-    duration = random.uniform(glitch_duration_min, glitch_duration_max)  # Duration between min and max
-    segment_durations.append((start_time, duration))
+if random_glitch_type == 'evenly':
+    # Evenly distribute glitch effects throughout the video
+    segment_positions = np.linspace(0, audio_duration - glitch_duration_max, glitch_freq)
+    for pos in segment_positions:
+        duration = random.uniform(glitch_duration_min, glitch_duration_max)
+        segment_durations.append((pos, duration))
+else:
+    # Randomly distribute glitch effects
+    for _ in range(glitch_freq):
+        start_time = random.uniform(0, audio_duration - glitch_duration_max)  # Random start time
+        duration = random.uniform(glitch_duration_min, glitch_duration_max)  # Duration between min and max
+        segment_durations.append((start_time, duration))
 
 current_input = output_video
 
-# Ensure unique glitch effects are applied
+# Reset effects available to ensure randomization every time
 effects_available = [
     "frei0r=distort0r:0.5|0.01", "frei0r=nervous", "frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6",
     "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1",
@@ -122,8 +132,8 @@ effects_available = [
 
 # Apply each glitch effect in sequence
 for i, (start_time, duration) in enumerate(segment_durations):
+    # Randomly select an effect for each glitch segment
     effect = random.choice(effects_available)
-    effects_available.remove(effect)  # Ensure the effect is not used again
     glitched_output = f"glitched_{i}.mp4"
     filter_complex_glitch = f"[0:v]trim=start={start_time}:duration={duration},setpts=PTS-STARTPTS,{effect}[g];[0:v][g]overlay=enable='between(t,{start_time},{start_time + duration})'[v]"
     glitch_command = f"ffmpeg -y -i {current_input} -filter_complex \"{filter_complex_glitch}\" -map '[v]' -map 0:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {glitched_output}"
