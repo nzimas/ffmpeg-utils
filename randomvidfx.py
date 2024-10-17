@@ -16,7 +16,7 @@ transition_time_min = 0.5  # minimum duration of each transition in seconds
 transition_time_max = 1  # maximum duration of each transition in seconds
 
 # Glitch effect settings (user can adjust these values)
-glitch_freq = 2 # defines the number of times an effect is applied
+glitch_freq = 3 # defines the number of times an effect is applied
 glitch_duration_min = 1  # minimum duration of the effect in seconds
 glitch_duration_max = 2  # maximum duration of the effect in seconds
 
@@ -113,8 +113,8 @@ current_input = output_video
 
 # Apply each glitch effect in sequence
 for i, (start_time, duration) in enumerate(segment_durations):
-    effect = random.choice(["frei0r=distort0r:0.5|0.01", "frei0r=nervous","frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6", "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1", "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'"])
-    #effect = random.choice(["frei0r=pixs0r:1"])
+    effect = random.choice(["frei0r=distort0r:0.5|0.01", "frei0r=nervous","frei0r=pixeliz0r:0.5", "frei0r=kaleid0sc0pe:0.1", "frei0r=elastic_scale:0.6", "frei0r=invert0r:0.5", "frei0r=saturat0r:0.5", "frei0r=glitch0r:0.5|0.5|0.5|0.5", "frei0r=glow", "frei0r=scanline0r:1", "frei0r=contrast0r:1", "frei0r=pixs0r:1", "edgedetect=low=0.1:high=0.3", "negate", "geq=lum_expr='random(1)*255'", "frei0r=baltan", "frei0r=cluster:1", "frei0r=contrast0r:1", "frei0r=letterb0xed", "frei0r=vignette", "frei0r=emboss"])
+    #effect = random.choice(["frei0r=dodge"])
     glitched_output = f"glitched_{i}.mp4"
     filter_complex_glitch = f"[0:v]trim=start={start_time}:duration={duration},setpts=PTS-STARTPTS,{effect}[g];[0:v][g]overlay=enable='between(t,{start_time},{start_time + duration})'[v]"
     glitch_command = f"ffmpeg -y -i {current_input} -filter_complex \"{filter_complex_glitch}\" -map '[v]' -map 0:a -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 320k {glitched_output}"
